@@ -99,4 +99,5 @@ class OrcamentoView(QMainWindow):
     def _exportar_pdf(self):
         o = self._get_selected_orcamento()
         if o:
-            self.controller.exportar_pdf_orcamento(o.id)
+            self.controller.exportar_pdf_orcamento(o)
+

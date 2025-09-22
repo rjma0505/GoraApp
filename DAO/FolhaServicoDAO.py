@@ -1,182 +1,123 @@
 import mysql.connector
-from Model.FolhaServico import FolhaServico
 from config import get_db_connection
-import logging
-
-# Configuração de logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class FolhaServicoDAO:
     def __init__(self):
         pass
-    
-    def criar_folha_servico(self, folha_servico):
-        """Cria uma nova folha de serviço na base de dados"""
-        try:
-            with get_db_connection() as conn:
-                with conn.cursor() as cursor:
-                    query = """
-                    INSERT INTO folhas_servico (veiculo_id, descricao_servico, tempo_estimado, estado) 
-                    VALUES (%s, %s, %s, %s)
-                    """
-                    values = (folha_servico.veiculo_id, folha_servico.descricao_servico, 
-                              folha_servico.tempo_estimado, folha_servico.estado)
-                    
-                    cursor.execute(query, values)
-                    conn.commit()
-                    
-                    folha_id = cursor.lastrowid
-                    logging.info(f"Folha de serviço criada com ID {folha_id}.")
-                    return folha_id
-        except mysql.connector.Error as e:
-            logging.error(f"Erro ao criar folha de serviço: {e}")
-            return None
-    
-    def criar_folha_de_orcamento(self, orcamento_id):
-        """Cria uma folha de serviço a partir de um orçamento aprovado"""
-        try:
-            with get_db_connection() as conn:
-                with conn.cursor() as cursor:
-                    query_orcamento = """
-                    SELECT veiculo_id, descricao, valor_estimado 
-                    FROM orcamentos 
-                    WHERE id = %s AND estado = 'aprovado'
-                    """
-                    cursor.execute(query_orcamento, (orcamento_id,))
-                    orcamento_data = cursor.fetchone()
-                    
-                    if not orcamento_data:
-                        logging.warning(f"Orçamento com ID {orcamento_id} não encontrado ou não aprovado.")
-                        return None
-                    
-                    veiculo_id, descricao, valor_estimado = orcamento_data
-                    
-                    # Criar a folha de serviço
-                    query_folha = """
-                    INSERT INTO folhas_servico (veiculo_id, descricao_servico, estado, tempo_estimado) 
-                    VALUES (%s, %s, 'pendente', %s)
-                    """
-                    tempo_estimado = int(valor_estimado) if valor_estimado else 60
-                    cursor.execute(query_folha, (veiculo_id, descricao, tempo_estimado))
-                    conn.commit()
-                    
-                    folha_id = cursor.lastrowid
-                    logging.info(f"Folha de serviço criada a partir do orçamento com ID {orcamento_id}.")
-                    return folha_id
-        except mysql.connector.Error as e:
-            logging.error(f"Erro ao criar folha de serviço a partir do orçamento {orcamento_id}: {e}")
-            return None
 
-    def obter_folha_por_id(self, folha_id):
-        """Obtém uma folha de serviço pelo ID com informações do cliente e veículo"""
+    def criar_folha_servico(self, dados):
+        """Cria uma nova folha de serviço no banco de dados."""
         try:
-            with get_db_connection() as conn:
-                with conn.cursor(dictionary=True) as cursor:
-                    query = """
-                    SELECT 
-                        fs.*, 
-                        v.marca, 
-                        v.modelo, 
-                        v.matricula, 
-                        c.nome AS cliente_nome 
-                    FROM folhas_servico fs 
-                    JOIN veiculos v ON fs.veiculo_id = v.id
-                    JOIN clientes c ON v.cliente_id = c.id
-                    WHERE fs.id = %s
-                    """
-                    cursor.execute(query, (folha_id,))
-                    folha_data = cursor.fetchone()
-                    
-                    if folha_data:
-                        logging.info(f"Folha de serviço com ID {folha_id} obtida com sucesso.")
-                    else:
-                        logging.warning(f"Folha de serviço com ID {folha_id} não encontrada.")
-                    
-                    return folha_data
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            query = """
+            INSERT INTO folhas_servico (orcamento_id, veiculo_id, descricao_servico, estado, tempo_real)
+            VALUES (%s, %s, %s, %s, %s)
+            """
+            cursor.execute(query, (
+                dados['orcamento_id'],
+                dados['veiculo_id'],
+                dados['descricao_servico'],
+                dados.get('estado', 'pendente'),
+                dados.get('tempo_real', 0)
+            ))
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return True
         except mysql.connector.Error as e:
-            logging.error(f"Erro ao obter folha de serviço com ID {folha_id}: {e}")
-            return None
-
-    def atualizar_folha_servico(self, folha_servico):
-        """Atualiza os dados de uma folha de serviço existente"""
-        try:
-            with get_db_connection() as conn:
-                with conn.cursor() as cursor:
-                    query = """
-                    UPDATE folhas_servico
-                    SET descricao_servico = %s,
-                        tempo_estimado = %s,
-                        estado = %s,
-                        data_inicio = %s,
-                        data_conclusao = %s
-                    WHERE id = %s
-                    """
-                    values = (
-                        folha_servico.descricao_servico,
-                        folha_servico.tempo_estimado,
-                        folha_servico.estado,
-                        folha_servico.data_inicio,
-                        folha_servico.data_conclusao,
-                        folha_servico.id
-                    )
-                    
-                    cursor.execute(query, values)
-                    conn.commit()
-                    
-                    rows_affected = cursor.rowcount
-                    if rows_affected > 0:
-                        logging.info(f"Folha de serviço com ID {folha_servico.id} atualizada com sucesso.")
-                    else:
-                        logging.warning(f"Folha de serviço com ID {folha_servico.id} não foi atualizada.")
-                    
-                    return rows_affected > 0
-        except mysql.connector.Error as e:
-            logging.error(f"Erro ao atualizar folha de serviço com ID {folha_servico.id}: {e}")
-            return False
-
-    def excluir_folha_servico(self, folha_id):
-        """Exclui uma folha de serviço da base de dados"""
-        try:
-            with get_db_connection() as conn:
-                with conn.cursor() as cursor:
-                    query = "DELETE FROM folhas_servico WHERE id = %s"
-                    
-                    cursor.execute(query, (folha_id,))
-                    conn.commit()
-                    
-                    rows_affected = cursor.rowcount
-                    if rows_affected > 0:
-                        logging.info(f"Folha de serviço com ID {folha_id} excluída com sucesso.")
-                    else:
-                        logging.warning(f"Folha de serviço com ID {folha_id} não encontrada.")
-                    
-                    return rows_affected > 0
-        except mysql.connector.Error as e:
-            logging.error(f"Erro ao excluir folha de serviço com ID {folha_id}: {e}")
+            print(f"Erro ao criar folha de serviço: {e}")
             return False
 
     def obter_todas_folhas_servico(self):
-        """Obtém todas as folhas de serviço com informações do cliente e veículo"""
+        """Retorna todas as folhas de serviço do banco de dados."""
         try:
-            with get_db_connection() as conn:
-                with conn.cursor(dictionary=True) as cursor:
-                    query = """
-                    SELECT 
-                        fs.*, 
-                        v.marca, 
-                        v.modelo, 
-                        v.matricula, 
-                        c.nome AS cliente_nome 
-                    FROM folhas_servico fs 
-                    JOIN veiculos v ON fs.veiculo_id = v.id
-                    JOIN clientes c ON v.cliente_id = c.id
-                    ORDER BY fs.data_criacao DESC
-                    """
-                    cursor.execute(query)
-                    folhas_data = cursor.fetchall()
-                    
-                    logging.info(f"{len(folhas_data)} folhas de serviço obtidas com sucesso.")
-                    return folhas_data
+            conn = get_db_connection()
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("SELECT * FROM folhas_servico")
+            folhas = cursor.fetchall()
+            cursor.close()
+            conn.close()
+            return folhas
         except mysql.connector.Error as e:
-            logging.error(f"Erro ao obter todas as folhas de serviço: {e}")
+            print(f"Erro ao obter folhas de serviço: {e}")
+            return []
+
+    def obter_folha_por_id(self, folha_id):
+        """Retorna uma folha de serviço específica pelo ID."""
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("SELECT * FROM folhas_servico WHERE id = %s", (folha_id,))
+            folha = cursor.fetchone()
+            cursor.close()
+            conn.close()
+            return folha
+        except mysql.connector.Error as e:
+            print(f"Erro ao obter folha: {e}")
+            return None
+
+    def atualizar_folha_servico(self, folha: dict):
+        """Atualiza os dados de uma folha de serviço existente."""
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            query = """
+            UPDATE folhas_servico
+            SET descricao_servico=%s, estado=%s, tempo_real=%s
+            WHERE id=%s
+            """
+            cursor.execute(query, (
+                folha['descricao_servico'],
+                folha['estado'],
+                folha['tempo_real'],
+                folha['id']
+            ))
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return True
+        except mysql.connector.Error as e:
+            print(f"Erro ao atualizar folha: {e}")
+            return False
+
+    def excluir_folha_servico(self, folha_id):
+        """Exclui uma folha de serviço pelo ID."""
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM folhas_servico WHERE id=%s", (folha_id,))
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return True
+        except mysql.connector.Error as e:
+            print(f"Erro ao excluir folha: {e}")
+            return False
+
+    def obter_folhas_aprovadas(self):
+        """
+        Retorna apenas folhas de serviços associadas a orçamentos aprovados,
+        incluindo informações de cliente e veículo.
+        """
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor(dictionary=True)
+            query = """
+            SELECT fs.id, fs.orcamento_id, fs.veiculo_id, fs.descricao_servico, fs.estado, fs.tempo_real,
+                   c.nome AS cliente_nome, v.marca AS veiculo_marca, v.modelo AS veiculo_modelo
+            FROM folhas_servico fs
+            JOIN orcamentos o ON fs.orcamento_id = o.id
+            JOIN clientes c ON o.cliente_id = c.id
+            JOIN veiculos v ON o.veiculo_id = v.id
+            WHERE o.estado = 'aprovado'
+            ORDER BY fs.id DESC
+            """
+            cursor.execute(query)
+            folhas = cursor.fetchall()
+            cursor.close()
+            conn.close()
+            return folhas
+        except mysql.connector.Error as e:
+            print(f"Erro ao obter folhas aprovadas: {e}")
             return []

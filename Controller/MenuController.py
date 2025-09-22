@@ -7,6 +7,7 @@ from DAO.UtilizadorDAO import UtilizadorDAO
 from Controller.ClienteController import ClienteController
 from Controller.VeiculoController import VeiculoController
 from Controller.OrcamentoController import OrcamentoController
+from Controller.FolhaServicoController import FolhaServicoController  # ✅ Import adicionado
 
 ROLE_PERMISSOES = {
     "admin": ["orcamentos", "clientes", "veiculos", "folhas"],
@@ -52,12 +53,13 @@ class MenuController:
         if self.utilizador.role != "admin":
             QMessageBox.warning(self.view, "Permissão negada", "Apenas administradores podem gerir orçamentos.")
             return
-        # Corrigido: instanciando OrcamentoController sem argumentos
         orcamento_controller = OrcamentoController()
         orcamento_controller.iniciar()
 
     def abrir_folhas_servico(self):
-        QMessageBox.information(self.view, "Folhas de Serviço", "Funcionalidade ainda não implementada.")
+        """Abre a gestão de folhas de serviço"""
+        fs_controller = FolhaServicoController(self.utilizador.id)
+        fs_controller.iniciar()
 
     def iniciar(self):
         self.view.show()
