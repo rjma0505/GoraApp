@@ -1,128 +1,146 @@
 # View/CriarOrcamentoDialog.py
 
-from PyQt5.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QLineEdit,
-    QDateEdit, QPushButton, QMessageBox
-)
-from PyQt5.QtCore import QDate
+from PyQt5.QtWidgets import QDialog, QVBoxLayout, QFormLayout, QLabel, QLineEdit, QComboBox, QPushButton, QMessageBox
 from DAO.ClienteDAO import ClienteDAO
 from DAO.VeiculoDAO import VeiculoDAO
-
+from Model.Orcamento import Orcamento
 
 class CriarOrcamentoDialog(QDialog):
-    def __init__(self, controller, parent=None):
+    def __init__(self, controller, orcamento_id=None, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Criar Orçamento")
         self.controller = controller
+        self.orcamento_id = orcamento_id
+        self.setWindowTitle("Criar / Editar Orçamento")
+        self.resize(500, 400)
 
-        self.cliente_dao = ClienteDAO()
-        self.veiculo_dao = VeiculoDAO()
-
-        self._setup_ui()
-        self._load_data()
-
-    def _setup_ui(self):
         layout = QVBoxLayout()
+        form_layout = QFormLayout()
 
-        # Cliente
-        layout.addWidget(QLabel("Cliente:"))
-        self.combo_cliente = QComboBox()
-        layout.addWidget(self.combo_cliente)
-        btn_novo_cliente = QPushButton("➕ Criar Novo Cliente")
-        btn_novo_cliente.clicked.connect(self._criar_novo_cliente)
-        layout.addWidget(btn_novo_cliente)
+        # Combobox de clientes
+        self.cliente_combo = QComboBox()
+        self.clientes = ClienteDAO().listar_clientes()
+        for c in self.clientes:
+            self.cliente_combo.addItem(c['nome'], c['id'])
+        form_layout.addRow("Cliente:", self.cliente_combo)
 
-        # Veículo
-        layout.addWidget(QLabel("Veículo:"))
-        self.combo_veiculo = QComboBox()
-        layout.addWidget(self.combo_veiculo)
-        btn_novo_veiculo = QPushButton("➕ Criar Novo Veículo")
-        btn_novo_veiculo.clicked.connect(self._criar_novo_veiculo)
-        layout.addWidget(btn_novo_veiculo)
+        # Combobox de veículos
+        self.veiculo_combo = QComboBox()
+        self.veiculos = []
+        if self.clientes:
+            primeiro_cliente_id = self.clientes[0]['id']
+            self.carregar_veiculos(primeiro_cliente_id)
+        form_layout.addRow("Veículo:", self.veiculo_combo)
 
-        # Descrição
-        layout.addWidget(QLabel("Descrição:"))
-        self.input_descricao = QLineEdit()
-        layout.addWidget(self.input_descricao)
+        # Atualizar veículos quando mudar cliente
+        self.cliente_combo.currentIndexChanged.connect(self.on_cliente_change)
 
-        # Valor estimado
-        layout.addWidget(QLabel("Valor Estimado (€):"))
-        self.input_valor = QLineEdit()
-        layout.addWidget(self.input_valor)
+        # Campos de descrição, valor e validade
+        self.descricao_input = QLineEdit()
+        self.valor_input = QLineEdit()
+        self.validade_input = QLineEdit()
+        form_layout.addRow("Descrição:", self.descricao_input)
+        form_layout.addRow("Valor Estimado:", self.valor_input)
+        form_layout.addRow("Validade (YYYY-MM-DD):", self.validade_input)
 
-        # Validade
-        layout.addWidget(QLabel("Validade:"))
-        self.input_validade = QDateEdit()
-        self.input_validade.setDate(QDate.currentDate().addDays(30))
-        self.input_validade.setCalendarPopup(True)
-        layout.addWidget(self.input_validade)
+        # Combobox de estado
+        self.estado_combo = QComboBox()
+        self.estado_combo.addItems(["pendente", "aprovado", "rejeitado"])
+        form_layout.addRow("Estado:", self.estado_combo)
 
-        # Estado
-        layout.addWidget(QLabel("Estado:"))
-        self.combo_estado = QComboBox()
-        self.combo_estado.addItems(["pendente", "aprovado", "rejeitado"])
-        layout.addWidget(self.combo_estado)
+        layout.addLayout(form_layout)
 
-        # Botões
-        btn_layout = QHBoxLayout()
-        btn_salvar = QPushButton("Salvar")
-        btn_salvar.clicked.connect(self._salvar_orcamento)
-        btn_cancelar = QPushButton("Cancelar")
-        btn_cancelar.clicked.connect(self.reject)
-        btn_layout.addWidget(btn_salvar)
-        btn_layout.addWidget(btn_cancelar)
-        layout.addLayout(btn_layout)
+        # Botões Guardar / Cancelar
+        self.btn_guardar = QPushButton("Guardar")
+        self.btn_cancelar = QPushButton("Cancelar")
+        layout.addWidget(self.btn_guardar)
+        layout.addWidget(self.btn_cancelar)
 
         self.setLayout(layout)
 
-    def _load_data(self):
-        """Carrega clientes e veículos da BD"""
-        self.combo_cliente.clear()
-        clientes = self.cliente_dao.listar_clientes()
-        for c in clientes:
-            self.combo_cliente.addItem(c["nome"], c["id"])
+        # Conectar sinais
+        self.btn_guardar.clicked.connect(self.guardar_orcamento)
+        self.btn_cancelar.clicked.connect(self.close)
 
-        self._load_veiculos()
+        # Se for edição, carregar dados
+        if self.orcamento_id:
+            self._carregar_orcamento()
 
-    def _load_veiculos(self, cliente_id=None):
-        self.combo_veiculo.clear()
-        cliente_id = cliente_id or self.combo_cliente.currentData()
-        veiculos = self.veiculo_dao.listar_por_cliente(cliente_id)
-        for v in veiculos:
-            self.combo_veiculo.addItem(f"{v['marca']} {v['modelo']} - {v['matricula']}", v["id"])
+    def carregar_veiculos(self, cliente_id):
+        self.veiculo_combo.clear()
+        self.veiculos = VeiculoDAO().listar_veiculos_por_cliente(cliente_id)
+        for v in self.veiculos:
+            display = f"{v.marca} {v.modelo} ({v.matricula})"
+            self.veiculo_combo.addItem(display, v.id)
 
-    def _criar_novo_cliente(self):
-        from View.NovoClienteDialog import NovoClienteDialog
-        dialog = NovoClienteDialog(self)
-        if dialog.exec_() == QDialog.Accepted:
-            self._load_data()
+    def on_cliente_change(self, index):
+        cliente_id = self.cliente_combo.itemData(index)
+        self.carregar_veiculos(cliente_id)
 
-    def _criar_novo_veiculo(self):
-        from View.NovoVeiculoDialog import NovoVeiculoDialog
-        cliente_id = self.combo_cliente.currentData()
-        dialog = NovoVeiculoDialog(cliente_id, self)
-        if dialog.exec_() == QDialog.Accepted:
-            self._load_veiculos(cliente_id)
-
-    def _salvar_orcamento(self):
-        cliente_id = self.combo_cliente.currentData()
-        veiculo_id = self.combo_veiculo.currentData()
-        descricao = self.input_descricao.text().strip()
-        valor = self.input_valor.text().strip()
-        validade = self.input_validade.date().toPyDate()
-        estado = self.combo_estado.currentText()
-
-        if not cliente_id or not veiculo_id or not valor:
-            QMessageBox.warning(self, "Erro", "Preencha todos os campos obrigatórios.")
+    def _carregar_orcamento(self):
+        """Carrega os dados de um orçamento existente para edição"""
+        resultados = self.controller.dao.listar_todos_orcamentos()
+        
+        # Converter dicts em objetos Orcamento
+        orcamentos = []
+        for r in resultados:
+            o = Orcamento(
+                cliente_id=r['cliente_id'],
+                veiculo_id=r['veiculo_id'],
+                descricao=r['descricao'],
+                valor_estimado=r['valor_estimado'],
+                validade=r['validade'],
+                estado=r['estado'],
+                id=r['id'],
+                data_criacao=r.get('data_criacao')
+            )
+            o.cliente_nome = r.get('cliente_nome')
+            o.veiculo_marca = r.get('veiculo_marca')
+            o.veiculo_modelo = r.get('veiculo_modelo')
+            orcamentos.append(o)
+        
+        orcamento = next((o for o in orcamentos if o.id == self.orcamento_id), None)
+        if not orcamento:
+            QMessageBox.warning(self, "Erro", "Orçamento não encontrado.")
+            self.close()
             return
 
+        # Selecionar cliente
+        idx_cliente = self.cliente_combo.findData(orcamento.cliente_id)
+        if idx_cliente >= 0:
+            self.cliente_combo.setCurrentIndex(idx_cliente)
+
+        # Atualizar veículos e selecionar veículo
+        self.carregar_veiculos(orcamento.cliente_id)
+        idx_veiculo = self.veiculo_combo.findData(orcamento.veiculo_id)
+        if idx_veiculo >= 0:
+            self.veiculo_combo.setCurrentIndex(idx_veiculo)
+
+        self.descricao_input.setText(orcamento.descricao)
+        self.valor_input.setText(str(orcamento.valor_estimado))
+        self.validade_input.setText(str(orcamento.validade))
+
+        idx_estado = self.estado_combo.findText(orcamento.estado)
+        if idx_estado >= 0:
+            self.estado_combo.setCurrentIndex(idx_estado)
+
+    def guardar_orcamento(self):
         try:
-            valor = float(valor)
-        except ValueError:
-            QMessageBox.warning(self, "Erro", "O valor estimado deve ser numérico.")
+            cliente_id = self.cliente_combo.currentData()
+            veiculo_id = self.veiculo_combo.currentData()
+            descricao = self.descricao_input.text()
+            valor = float(self.valor_input.text())
+            validade = self.validade_input.text()
+            estado = self.estado_combo.currentText()
+        except Exception as e:
+            QMessageBox.warning(self, "Erro", f"Dados inválidos: {e}")
             return
 
-        self.controller.criar_orcamento(
-            cliente_id, veiculo_id, descricao, valor, validade, estado
-        )
-        self.accept()
+        if self.orcamento_id:
+            # Atualizar orçamento existente
+            orcamento = Orcamento(cliente_id, veiculo_id, descricao, valor, validade, estado, id=self.orcamento_id)
+            self.controller.editar_orcamento(orcamento)
+        else:
+            # Criar novo orçamento
+            self.controller.criar_orcamento(cliente_id, veiculo_id, descricao, valor, validade, estado)
+
+        self.close()

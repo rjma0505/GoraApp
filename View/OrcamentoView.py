@@ -1,71 +1,102 @@
 # View/OrcamentoView.py
 
-from PyQt5.QtWidgets import QMainWindow, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget, QPushButton, QLabel
+from PyQt5.QtWidgets import QMainWindow, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget, QPushButton, QHBoxLayout, QMessageBox
+from PyQt5.QtCore import Qt
+from View.CriarOrcamentoDialog import CriarOrcamentoDialog
 
 class OrcamentoView(QMainWindow):
     def __init__(self, orcamentos, controller, parent=None):
-        """Construtor da OrcamentoView"""
         super().__init__(parent)
         self.setWindowTitle("Orçamentos")
-        
-        self.orcamentos = orcamentos  # Lista de orçamentos a serem exibidos
-        self.controller = controller  # Passa o controlador para a view
-        
-        # Defina o layout da janela
+        self.setMinimumSize(1300, 500)  # Maior largura para caber a coluna de descrição
+        self.orcamentos = orcamentos
+        self.controller = controller
+
         layout = QVBoxLayout()
 
-        # Adiciona um rótulo para exibir se não houver orçamentos
-        if not orcamentos:
-            self.no_orcamentos_label = QLabel("Nenhum orçamento encontrado.")
-            layout.addWidget(self.no_orcamentos_label)  # Exibe a mensagem
-            
-            # Aqui você pode abrir o CriarOrcamentoDialog automaticamente se não houver orçamentos
-            self.abrir_criar_orcamento_dialog()
-        
-        # Crie uma tabela para exibir os orçamentos, se houver
-        self.table_widget = QTableWidget()
-        
-        if orcamentos:
-            self.table_widget.setRowCount(len(orcamentos))  # Defina o número de linhas
-            self.table_widget.setColumnCount(5)  # Defina o número de colunas (ajuste conforme necessário)
+        # Tabela de orçamentos
+        self.table = QTableWidget()
+        self.table.setColumnCount(8)
+        self.table.setHorizontalHeaderLabels([
+            "ID", "Cliente", "Veículo", "Descrição", "Valor Estimado", "Estado", "Data Criação", "Validade"
+        ])
+        self.table.setRowCount(len(orcamentos))
+        self.table.setWordWrap(True)
+        self.table.setAlternatingRowColors(True)
 
-            # Preencha a tabela com os dados
-            for row, orcamento in enumerate(orcamentos):
-                self.table_widget.setItem(row, 0, QTableWidgetItem(str(orcamento.id)))  # Exemplo de preenchimento
-                self.table_widget.setItem(row, 1, QTableWidgetItem(orcamento.cliente_nome))
-                self.table_widget.setItem(row, 2, QTableWidgetItem(orcamento.veiculo_info))
-                self.table_widget.setItem(row, 3, QTableWidgetItem(str(orcamento.valor_estimado)))
-                self.table_widget.setItem(row, 4, QTableWidgetItem(orcamento.estado))
+        # Preencher a tabela
+        for row, o in enumerate(orcamentos):
+            self.table.setItem(row, 0, QTableWidgetItem(str(o.id)))
+            self.table.setItem(row, 1, QTableWidgetItem(o.cliente_nome))
+            self.table.setItem(row, 2, QTableWidgetItem(f"{o.veiculo_marca} {o.veiculo_modelo}"))
+            self.table.setItem(row, 3, QTableWidgetItem(o.descricao))
+            self.table.setItem(row, 4, QTableWidgetItem(str(o.valor_estimado)))
+            self.table.setItem(row, 5, QTableWidgetItem(o.estado))
+            self.table.setItem(row, 6, QTableWidgetItem(str(o.data_criacao)))
+            self.table.setItem(row, 7, QTableWidgetItem(str(o.validade)))
 
-            layout.addWidget(self.table_widget)
-        
-        # Botão para criar novo orçamento
-        self.criar_orcamento_button = QPushButton("Criar Novo Orçamento")
-        self.criar_orcamento_button.clicked.connect(self.criar_orcamento)
-        
-        layout.addWidget(self.criar_orcamento_button)
-        
-        # Defina o layout principal
-        widget = QWidget()
-        widget.setLayout(layout)
-        self.setCentralWidget(widget)
+        # Ajustar largura das colunas
+        self.table.setColumnWidth(0, 50)    # ID
+        self.table.setColumnWidth(1, 150)   # Cliente
+        self.table.setColumnWidth(2, 150)   # Veículo
+        self.table.setColumnWidth(3, 450)   # Descrição (maior)
+        self.table.setColumnWidth(4, 120)   # Valor Estimado
+        self.table.setColumnWidth(5, 100)   # Estado
+        self.table.setColumnWidth(6, 150)   # Data Criação
+        self.table.setColumnWidth(7, 100)   # Validade (apenas para a data)
 
-    def criar_orcamento(self):
-        """Abre a janela para criar um novo orçamento"""
-        from View.CriarOrcamentoDialog import CriarOrcamentoDialog  # Importação aqui para evitar o loop circular
-        dialog = CriarOrcamentoDialog(self.controller)  # Passando a instância de OrcamentoController para a view
+        layout.addWidget(self.table)
+
+        # Botões
+        btn_layout = QHBoxLayout()
+        self.btn_novo = QPushButton("Novo Orçamento")
+        self.btn_editar = QPushButton("Editar")
+        self.btn_eliminar = QPushButton("Eliminar")
+        self.btn_exportar = QPushButton("Exportar PDF")
+
+        btn_layout.addWidget(self.btn_novo)
+        btn_layout.addWidget(self.btn_editar)
+        btn_layout.addWidget(self.btn_eliminar)
+        btn_layout.addWidget(self.btn_exportar)
+
+        layout.addLayout(btn_layout)
+
+        container = QWidget()
+        container.setLayout(layout)
+        self.setCentralWidget(container)
+
+        # Conexões dos botões
+        self.btn_novo.clicked.connect(self._novo_orcamento)
+        self.btn_editar.clicked.connect(self._editar_orcamento)
+        self.btn_eliminar.clicked.connect(self._eliminar_orcamento)
+        self.btn_exportar.clicked.connect(self._exportar_pdf)
+
+    def _get_selected_orcamento(self):
+        row = self.table.currentRow()
+        if row == -1:
+            QMessageBox.warning(self, "Erro", "Selecione um orçamento.")
+            return None
+        return self.orcamentos[row]
+
+    def _novo_orcamento(self):
+        dialog = CriarOrcamentoDialog(self.controller)
         dialog.exec_()
 
-    def abrir_criar_orcamento_dialog(self):
-        """Abre o diálogo de criação de orçamento automaticamente"""
-        from View.CriarOrcamentoDialog import CriarOrcamentoDialog  # Importação aqui para evitar o loop circular
-        dialog = CriarOrcamentoDialog(self.controller)  # Passando o controlador para o dialog
-        dialog.exec_()
+    def _editar_orcamento(self):
+        o = self._get_selected_orcamento()
+        if o:
+            dialog = CriarOrcamentoDialog(self.controller, orcamento_id=o.id)
+            dialog.exec_()
 
-    def show_window(self):
-        """Mostra a janela"""
-        print("Abrindo OrcamentoView...")  # Depuração
-        if not self.orcamentos:  # Verifica se não há orçamentos
-            self.abrir_criar_orcamento_dialog()  # Abre o diálogo automaticamente
+    def _eliminar_orcamento(self):
+        o = self._get_selected_orcamento()
+        if o:
+            confirm = QMessageBox.question(self, "Confirmar", f"Eliminar orçamento #{o.id}?",
+                                           QMessageBox.Yes | QMessageBox.No)
+            if confirm == QMessageBox.Yes:
+                self.controller.eliminar_orcamento(o.id)
 
-        self.show()  # Exibe a janela da OrcamentoView
+    def _exportar_pdf(self):
+        o = self._get_selected_orcamento()
+        if o:
+            self.controller.exportar_pdf_orcamento(o.id)

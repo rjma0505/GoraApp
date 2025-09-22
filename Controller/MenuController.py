@@ -1,3 +1,5 @@
+# Controller/MenuController.py
+
 import sys
 from PyQt5.QtWidgets import QMessageBox
 from View.MenuView import MenuView
@@ -5,7 +7,6 @@ from DAO.UtilizadorDAO import UtilizadorDAO
 from Controller.ClienteController import ClienteController
 from Controller.VeiculoController import VeiculoController
 from Controller.OrcamentoController import OrcamentoController
-from DAO.OrcamentoDAO import OrcamentoDAO
 
 ROLE_PERMISSOES = {
     "admin": ["orcamentos", "clientes", "veiculos", "folhas"],
@@ -51,8 +52,8 @@ class MenuController:
         if self.utilizador.role != "admin":
             QMessageBox.warning(self.view, "Permissão negada", "Apenas administradores podem gerir orçamentos.")
             return
-        orcamento_dao = OrcamentoDAO()
-        orcamento_controller = OrcamentoController(orcamento_dao)
+        # Corrigido: instanciando OrcamentoController sem argumentos
+        orcamento_controller = OrcamentoController()
         orcamento_controller.iniciar()
 
     def abrir_folhas_servico(self):
