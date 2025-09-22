@@ -3,35 +3,69 @@ import re
 from typing import Optional
 
 class Veiculo:
+    PADROES_MATRICULA = {
+        "Portugal": [
+            r"^\d{2}-\d{2}-\d{2}$",
+            r"^[A-Z]{2}-\d{2}-[A-Z]{2}$",
+            r"^\d{2}-[A-Z]{2}-\d{2}$",
+            r"^[A-Z]{2}-\d{2}-\d{2}$",
+            r"^\d{2}-\d{2}-[A-Z]{2}$",
+            r"^\d{2}-[A-Z]{2}-[A-Z]{2}$",
+        ],
+        "Espanha": [
+            r"^\d{4} [A-Z]{3}$",
+            r"^[A-Z]{1,2}-\d{1,4}-[A-Z]{1,2}$",
+        ],
+        "França": [
+            r"^\d{2}-[A-Z]{2}-\d{3}$",
+            r"^\d{2}[A-Z]{2}\d{3}$",
+        ],
+        "Alemanha": [
+            r"^[A-Z]{1,3}-[A-Z]{1,2} \d{1,4}$",
+        ],
+        "Luxemburgo": [
+            r"^[A-Z]{1,2} \d{1,4}$",
+        ],
+        "Suíça": [
+            r"^[A-Z]{2} \d{1,4}$",
+        ]
+    }
+
     def __init__(self, id: Optional[int] = None, cliente_id: Optional[int] = None,
                  marca: Optional[str] = None, modelo: Optional[str] = None,
-                 matricula: Optional[str] = None, pais: Optional[str] = None):
+                 matricula: Optional[str] = None, pais: Optional[str] = None,
+                 validar: bool = True):
+        """
+        Se validar=True, faz validação da matrícula.
+        Se validar=False, cria o objeto sem validar (útil para instanciar veículos antigos da DB)
+        """
         self.id = id
         self.cliente_id = cliente_id
         self.marca = marca
         self.modelo = modelo
         self.matricula = matricula
         self.pais = pais
-        
-        # Validação da matrícula e país
-        if matricula and not self.validar_matricula(matricula):
-            raise ValueError("Matrícula inválida.")
-        
-        if pais and not self.validar_pais(pais):
-            raise ValueError("País inválido.")
+
+        if validar and pais and matricula:
+            if not self.validar_matricula_por_pais(matricula, pais):
+                raise ValueError(f"Matrícula inválida para o país {pais}.")
 
     def __repr__(self) -> str:
-        """
-        Retorna uma representação detalhada do objeto veiculo.
-        """
         return (f"Veiculo(id={self.id}, cliente_id={self.cliente_id}, "
                 f"marca='{self.marca}', modelo='{self.modelo}', "
                 f"matricula='{self.matricula}', pais='{self.pais}')")
-    
+
+    @classmethod
+    def validar_matricula_por_pais(cls, matricula: str, pais: str) -> bool:
+        padroes_pais = cls.PADROES_MATRICULA.get(pais)
+        if not padroes_pais:
+            return False
+        for padrao in padroes_pais:
+            if re.fullmatch(padrao, matricula):
+                return True
+        return False
+
     def to_dict(self) -> dict:
-        """
-        Retorna o veiculo como um dicionário (útil para APIs ou exportação de dados).
-        """
         return {
             "id": self.id,
             "cliente_id": self.cliente_id,
@@ -40,34 +74,15 @@ class Veiculo:
             "matricula": self.matricula,
             "pais": self.pais
         }
-    
+
     @classmethod
     def from_dict(cls, data: dict) -> 'Veiculo':
-        """
-        Constrói um objeto Veiculo a partir de um dicionário de dados.
-        """
         return cls(
             id=data.get('id'),
             cliente_id=data.get('cliente_id'),
             marca=data.get('marca'),
             modelo=data.get('modelo'),
             matricula=data.get('matricula'),
-            pais=data.get('pais')
+            pais=data.get('pais'),
+            validar=False  # aqui não validamos, para evitar erros com matrículas antigas
         )
-    
-    def validar_matricula(self, matricula: str) -> bool:
-        """
-        Valida o formato da matrícula (exemplo: Portugal: XX-XX-XX ou XX-XX-XX).
-        Pode ser ajustado para outros países.
-        """
-        # Exemplo de padrão para matrículas portuguesas (ajuste conforme necessário)
-        pattern = r"^[A-Z]{2}-\d{2}-[A-Z]{2}$"
-        return bool(re.match(pattern, matricula))
-
-    def validar_pais(self, pais: str) -> bool:
-        """
-        Valida se o país é uma string válida. Pode-se expandir para uma lista de países válidos.
-        """
-        # Lista simplificada de países (pode ser expandida)
-        paises_validos = ["Portugal", "Brasil", "Espanha", "França", "Alemanha"]
-        return pais in paises_validos

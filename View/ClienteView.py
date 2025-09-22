@@ -1,53 +1,75 @@
-# View/ClienteView.py
-
-from PyQt5.QtWidgets import QDialog, QFormLayout, QLineEdit, QDialogButtonBox
+from PyQt5.QtWidgets import QDialog, QVBoxLayout, QListWidget, QPushButton, QMessageBox, QLabel, QHBoxLayout
+from View.NovoClienteDialog import NovoClienteDialog
 
 class ClienteView(QDialog):
     def __init__(self, controller, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Adicionar Novo Cliente")
-        
-        # Layout do formulário
-        layout = QFormLayout()
-        
-        # Campos de dados
-        self.nome_input = QLineEdit()
-        self.contacto_input = QLineEdit()
-        self.email_input = QLineEdit()
-        self.morada_input = QLineEdit()
-        
-        # Adiciona os campos ao formulário
-        layout.addRow("Nome:", self.nome_input)
-        layout.addRow("Contacto:", self.contacto_input)
-        layout.addRow("E-mail:", self.email_input)
-        layout.addRow("Morada:", self.morada_input)
-        
-        # Botões de ação (OK/Cancelar)
-        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        button_box.accepted.connect(self.aceitar)
-        button_box.rejected.connect(self.reject)
-        
-        layout.addWidget(button_box)
-        
+        self.controller = controller
+        self.setWindowTitle("Clientes")
+        self.resize(500, 400)
+
+        layout = QVBoxLayout()
+        layout.addWidget(QLabel("Lista de Clientes:"))
+
+        self.lista_clientes = QListWidget()
+        layout.addWidget(self.lista_clientes)
+
+        # Botões
+        btn_layout = QHBoxLayout()
+        self.btn_adicionar = QPushButton("Adicionar Novo Cliente")
+        self.btn_editar = QPushButton("Editar Cliente")
+        self.btn_apagar = QPushButton("Apagar Cliente")
+        btn_layout.addWidget(self.btn_adicionar)
+        btn_layout.addWidget(self.btn_editar)
+        btn_layout.addWidget(self.btn_apagar)
+        layout.addLayout(btn_layout)
+
         self.setLayout(layout)
-        self.controller = controller  # Controlador passado
 
-    def obter_dados_formulario(self):
-        """Obtém os dados inseridos no formulário"""
-        nome = self.nome_input.text()
-        contacto = self.contacto_input.text()
-        email = self.email_input.text()
-        morada = self.morada_input.text()
-        criado_em = "CURRENT_TIMESTAMP"  # Para a data e hora atual
-        
-        return nome, contacto, email, morada, criado_em
+        # Conectar sinais
+        self.btn_adicionar.clicked.connect(self._novo_cliente)
+        self.btn_editar.clicked.connect(self._editar_cliente)
+        self.btn_apagar.clicked.connect(self._apagar_cliente)
 
-    def aceitar(self):
-        """Ação para adicionar um novo cliente"""
-        nome, contacto, email, morada, criado_em = self.obter_dados_formulario()
-        
-        # Aqui você vai enviar esses dados para o controlador que irá persistir no banco
-        self.controller.adicionar_cliente(nome, contacto, email, morada, criado_em)
-        
-        # Fecha o diálogo após salvar
-        self.accept()
+        self._atualizar_lista()
+
+    def _atualizar_lista(self):
+        self.lista_clientes.clear()
+        clientes = self.controller.listar_clientes()
+        for c in clientes:
+            self.lista_clientes.addItem(f"{c['id']}: {c['nome']}")
+
+    def _novo_cliente(self):
+        dialog = NovoClienteDialog(self.controller)
+        if dialog.exec_():
+            self._atualizar_lista()
+
+    def _editar_cliente(self):
+        item = self.lista_clientes.currentItem()
+        if not item:
+            QMessageBox.warning(self, "Erro", "Selecione um cliente para editar.")
+            return
+
+        cliente_id = int(item.text().split(":")[0])
+        cliente = self.controller.obter_cliente_por_id(cliente_id)
+
+        dialog = NovoClienteDialog(self.controller, cliente=cliente)
+        if dialog.exec_():
+            self._atualizar_lista()
+
+    def _apagar_cliente(self):
+        item = self.lista_clientes.currentItem()
+        if not item:
+            QMessageBox.warning(self, "Erro", "Selecione um cliente para apagar.")
+            return
+
+        cliente_id = int(item.text().split(":")[0])
+        confirm = QMessageBox.question(
+            self,
+            "Confirmação",
+            "Deseja realmente apagar este cliente?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if confirm == QMessageBox.Yes:
+            self.controller.remover_cliente(cliente_id)
+            self._atualizar_lista()
